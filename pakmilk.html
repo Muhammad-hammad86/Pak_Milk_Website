@@ -49,10 +49,49 @@
     .brand .title small { display:block; font-weight:600; color:var(--muted); font-size:12px; margin-top:-4px; }
 
     /* search */
-    .search-wrap { flex:1; display:flex; justify-content:center; }
-    .search { width:60%; max-width:640px; min-width:180px; display:flex; gap:8px; align-items:center; }
+    .search-wrap { flex:1; display:flex; justify-content:center; position: relative; }
+    .search { width:60%; max-width:640px; min-width:180px; display:flex; gap:8px; align-items:center; position: relative; }
     .search input[type="search"] { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #e6edf1; background:#fff; box-shadow:0 2px 8px rgba(10,20,30,0.03); }
     .search button { background:var(--brand-green); color:#fff; border:none; padding:10px 12px; border-radius:8px; cursor:pointer; }
+
+    /* Search suggestions dropdown */
+    .search-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--card);
+      border-radius: 0 0 10px 10px;
+      box-shadow: var(--shadow);
+      border: 1px solid #eef2f5;
+      border-top: none;
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 100;
+      display: none;
+    }
+    .search-suggestion {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f4f8;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .search-suggestion:hover {
+      background: #f8fafc;
+    }
+    .search-suggestion:last-child {
+      border-bottom: none;
+    }
+    .suggestion-category {
+      font-size: 12px;
+      color: var(--muted);
+      background: #f0f7f2;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: auto;
+    }
 
     /* right controls */
     .controls { display:flex; gap:10px; align-items:center; margin-left:auto; }
@@ -130,18 +169,36 @@
       .modal img { width:100%; }
       .footer-content { grid-template-columns: repeat(2, 1fr); }
     }
-    @media (max-width: 640px) {
-      .topbar-inner { padding:10px; }
+    @media (max-width: 768px) {
+      .topbar-inner { padding:10px 12px; flex-wrap: wrap; }
+      .brand { flex: 1; }
       .brand .title { font-size:18px; }
       .search { width:100%; display:none; } /* hide large search on mobile - use icon */
       .search-mobile { display:inline-flex; gap:8px; align-items:center; margin-left:8px; }
       .subnav-inner { flex-wrap:wrap; gap:8px; }
-      .grid { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: repeat(2, 1fr); }
       nav.subnav { position:static; top:auto; }
       .modal { padding:12px; }
       .cart-drawer { width:100%; max-width:400px; }
       .footer-content { grid-template-columns: 1fr; gap: 20px; }
       .footer-bottom { flex-direction: column; gap: 10px; text-align: center; }
+      .hero h1 { font-size: 24px; }
+      .hero .lead { flex: 1 1 100%; }
+    }
+    @media (max-width: 480px) {
+      .topbar-inner { padding:8px 10px; }
+      .brand .title { font-size:16px; }
+      .controls { gap: 6px; }
+      .icon-btn { padding: 6px 8px; }
+      .grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 22px; }
+      .hero p { font-size: 14px; }
+      .card { padding: 10px; }
+      .card h4 { font-size: 15px; }
+      .card p { font-size: 12px; }
+      .footer-content { grid-template-columns: 1fr; }
+      .footer-section h4 { font-size: 16px; }
+      .footer-section a { font-size: 14px; }
     }
 
     /* small helpers */
@@ -493,6 +550,7 @@
         <div class="search" id="searchBar">
           <input id="searchInput" type="search" placeholder="Search products, e.g. Pure Milk" aria-label="Search products" />
           <button id="searchBtn" aria-label="Search">Search</button>
+          <div class="search-suggestions" id="searchSuggestions"></div>
         </div>
 
         <!-- mobile search icon -->
@@ -921,6 +979,7 @@
     const productGrid = document.getElementById('productGrid');
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
+    const searchSuggestions = document.getElementById('searchSuggestions');
     const resultsInfo = document.getElementById('resultsInfo');
     const noResults = document.getElementById('noResults');
     const catBtn = document.getElementById('catBtn');
@@ -1005,6 +1064,73 @@
 
     // escape helper to avoid injection
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+
+    // -------------------------
+    // Enhanced Search Suggestions
+    // -------------------------
+    function showSearchSuggestions(query) {
+      if (!query || query.length < 1) {
+        searchSuggestions.style.display = 'none';
+        return;
+      }
+      
+      const queryLower = query.toLowerCase();
+      const suggestions = [];
+      
+      // Find matching products
+      PRODUCTS.forEach(product => {
+        if (product.name.toLowerCase().includes(queryLower) || 
+            product.category.toLowerCase().includes(queryLower) ||
+            product.description.toLowerCase().includes(queryLower)) {
+          suggestions.push({
+            text: product.name,
+            category: product.category,
+            type: 'product'
+          });
+        }
+      });
+      
+      // Find matching categories
+      const categories = [...new Set(PRODUCTS.map(p => p.category))];
+      categories.forEach(category => {
+        if (category.toLowerCase().includes(queryLower)) {
+          suggestions.push({
+            text: category,
+            category: 'Category',
+            type: 'category'
+          });
+        }
+      });
+      
+      // Remove duplicates
+      const uniqueSuggestions = suggestions.filter((s, index, self) => 
+        index === self.findIndex(t => t.text === s.text && t.category === s.category)
+      );
+      
+      // Limit to 5 suggestions
+      const limitedSuggestions = uniqueSuggestions.slice(0, 5);
+      
+      if (limitedSuggestions.length > 0) {
+        searchSuggestions.innerHTML = '';
+        limitedSuggestions.forEach(suggestion => {
+          const div = document.createElement('div');
+          div.className = 'search-suggestion';
+          div.innerHTML = `
+            <span>${escapeHtml(suggestion.text)}</span>
+            <span class="suggestion-category">${escapeHtml(suggestion.category)}</span>
+          `;
+          div.addEventListener('click', () => {
+            searchInput.value = suggestion.text;
+            updateResults(suggestion.text);
+            searchSuggestions.style.display = 'none';
+          });
+          searchSuggestions.appendChild(div);
+        });
+        searchSuggestions.style.display = 'block';
+      } else {
+        searchSuggestions.style.display = 'none';
+      }
+    }
 
     // -------------------------
     // Enhanced Auth System Functions
@@ -1421,7 +1547,24 @@
 
     // Search handlers
     searchBtn.addEventListener('click', () => updateResults(searchInput.value));
-    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') updateResults(searchInput.value); });
+    searchInput.addEventListener('keydown', (e) => { 
+      if (e.key === 'Enter') {
+        updateResults(searchInput.value);
+        searchSuggestions.style.display = 'none';
+      }
+    });
+    
+    // Search suggestions
+    searchInput.addEventListener('input', (e) => {
+      showSearchSuggestions(e.target.value);
+    });
+    
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!searchInput.contains(e.target) && !searchSuggestions.contains(e.target)) {
+        searchSuggestions.style.display = 'none';
+      }
+    });
 
     // -------------------------
     // Modal for product details
@@ -1748,7 +1891,7 @@
     // -------------------------
     // Hide big search on small screens; show icon
     function adaptSearchForScreen() {
-      const mq = window.matchMedia('(max-width:640px)');
+      const mq = window.matchMedia('(max-width:768px)');
       if (mq.matches) {
         document.getElementById('searchBar').style.display = 'none';
         document.getElementById('mobileSearchIcon').style.display = 'inline-flex';
@@ -1810,7 +1953,7 @@
       document.getElementById('searchBar').style.display = 'flex';
       searchInput.focus();
       // hide after blur/resizing
-      const hideFn = ()=> { if (window.innerWidth < 640) document.getElementById('searchBar').style.display = 'none'; document.removeEventListener('click', hideFn); };
+      const hideFn = ()=> { if (window.innerWidth < 768) document.getElementById('searchBar').style.display = 'none'; document.removeEventListener('click', hideFn); };
       setTimeout(()=> document.addEventListener('click', hideFn), 600);
     });
 
